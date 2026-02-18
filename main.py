@@ -13,6 +13,7 @@ from lxml import html as html2
 from lxml import etree
 import re
 import gc
+from sys import exit
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 __version__: str = "1.0 OpenBeta"
@@ -450,9 +451,9 @@ def main() -> int:
         f"Finished update process. Success: {success_count}, Failed: {fail_count}"
     )
     logging.info("All processes completed.")
-    os.system("start msedge 127.0.0.1:5500")
     return 1 if fail_count else 0
 
 
-if __name__ == "__main__":
-    exit(main())
+# if __name__ == "__main__":
+main()
+input()

@@ -1,2 +1,5 @@
 .venv
 .idea
+nuitka-crash-report.xml
+build
+test.applog
