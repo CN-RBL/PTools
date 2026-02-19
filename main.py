@@ -1,24 +1,43 @@
 # -*- coding: utf-8 -*-
 
-import markdown_it
-import platform
-import importlib.metadata
-from rich.logging import RichHandler
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
+module_err: set = set([])
+
+try:
+    import markdown_it
+except ImportError:
+    module_err.add("markdown-it-py")
+try:
+    from rich.logging import RichHandler
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+except ImportError:
+    module_err.add("rich")
 import logging
 import os
-from lxml import html as html2
-from lxml import etree
+
+try:
+    from lxml import html as html2
+    from lxml import etree
+except ImportError:
+    module_err.add("lxml")
 import re
 import gc
 from sys import exit
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-__version__: str = "1.0 OpenBeta"
+__version__: str = "1.0 R-Dev"
 
 gc.enable()
+
+if module_err:
+    for me in module_err:
+        logging.error(f"Module {me} is not installed!")
+    logging.error(
+        f"Tip: The next time you download a Python project, remember to check if the dependencies are installed first"
+    )
+    exit(1)
+
 
 # 将格式化函数提升到模块级别，以便多线程调用
 def pretty_print_html(html_str: str) -> str:
@@ -50,7 +69,7 @@ def pretty_print_html(html_str: str) -> str:
         return text
 
     # 递归遍历元素树，处理text和tail中的标记
-    def process_markup(element, skip=False):
+    def process_markup(element, skip: bool = False):
         # 处理element的text（如果不跳过）
         if not skip:
             if element.text and "%%" in element.text:
@@ -70,7 +89,7 @@ def pretty_print_html(html_str: str) -> str:
     if doctype_match:
         doctype = doctype_match.group(1)
         before_doctype = html_str[: doctype_match.start()]  # DOCTYPE前的注释等
-        after_doctype = html_str[doctype_match.end() :]  # DOCTYPE后的内容
+        after_doctype = html_str[doctype_match.end():]  # DOCTYPE后的内容
     else:
         doctype = ""
         before_doctype = ""
@@ -99,7 +118,7 @@ def pretty_print_html(html_str: str) -> str:
         return before_doctype + doctype + "\n" + formatted_root
 
     except Exception as e:
-        logging.warning(f"完整文档解析失败，尝试片段模式: {e}")
+        warn(f"完整文档解析失败，尝试片段模式: {e}")
         # 降级方案：使用fragments_fromstring确保内容不丢失
         try:
             fragments = html2.fragments_fromstring(html_str)
@@ -112,7 +131,7 @@ def pretty_print_html(html_str: str) -> str:
                     try:
                         etree.indent(frag, space="    ")
                     except:
-                        pass
+                        error(f"Format error:\n\tat {frag}")
                     # 调整pre/code格式
                     for pre in frag.xpath(".//pre"):
                         if len(pre) > 0 and pre[0].tag == "code":
@@ -125,12 +144,12 @@ def pretty_print_html(html_str: str) -> str:
                     )
             return "".join(pretty_parts)
         except Exception as e2:
-            logging.error(f"格式化失败，保留原始内容: {e2}")
+            error(f"格式化失败，保留原始内容: {e2}")
             return html_str
 
 
 def process_file(
-    path: str, output_dir: str, template_content: str | None, format_all: bool
+        path: str, output_dir: str, template_content: str | None, format_all: bool
 ) -> tuple:
     """处理单个Markdown文件的函数，在线程池中执行"""
     try:
@@ -141,30 +160,27 @@ def process_file(
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
         html: str = md.render(content)
-        output_path: str = os.path.join(
-            output_dir, os.path.basename(path).replace(".md", ".html")
+        output_path: str = path2.join(
+            output_dir, path2.basename(path).replace(".md", ".html")
         )
 
         if template_content:
             # 使用原始模板内容进行替换，不修改共享变量
-            title_els = html2.fromstring(html).xpath(".//h1")
-            title = title_els[0].text_content() if title_els else "Untitled"
-            filled_template = template_content.replace("%%title%%", title)
-            html = filled_template.replace("%%content%%", html)
+            title_els: list = html2.fromstring(html).xpath(".//h1")
+            title: str = title_els[0].text_content() if title_els else "Untitled"
+            html: str = template_content.replace("%%title%%", title).replace("%%content%%", html)
 
         # 先写入原始HTML
-        with open(output_path, "w", encoding="utf-8") as f:
+        with open(output_path, "w+", encoding="utf-8") as f:
             f.write(html)
 
-        if format_all:
-            with open(output_path, "r", encoding="utf-8") as f:
+            if format_all:
                 raw_html = f.read()
-            pretty_html = pretty_print_html(raw_html)
-            with open(output_path, "w", encoding="utf-8") as f:
+                pretty_html = pretty_print_html(raw_html)
                 f.write(pretty_html)
-            logging.info(f"Formatted: {output_path}")
-        else:
-            logging.info(f"Converted without formatting: {output_path}")
+                info(f"Formatted: {output_path}")
+            else:
+                info(f"Converted without formatting: {output_path}")
 
         return True, path, output_path, None
     except Exception as e:
@@ -174,7 +190,7 @@ def process_file(
 def main() -> int:
     console: Console = Console()
     panel: Panel = Panel(
-        Text("Welcome to the Python Tools application!", justify="center"),
+        Text("Welcome to the Web Tools application!", justify="center"),
         title="PTools",
         subtitle="Enjoy your using!",
         style="bold green",
@@ -184,43 +200,57 @@ def main() -> int:
         level=logging.DEBUG, format="%(message)s", handlers=[RichHandler()]
     )
 
-    logging.info("Starting main process.")
-    logging.debug(f"Platform: {platform.platform()}")
-    logging.debug(f"Python version: {platform.python_version()}")
-    logging.debug(f"markdown-it module version: {markdown_it.__version__}")
-    logging.debug(f"rich module version: {importlib.metadata.version('rich')}")
-    logging.debug(f"PTools module version: {__version__}")
+    # 去点优化
+    globals()["debug"] = logging.debug
+    globals()["info"] = logging.info
+    globals()["warn"] = logging.warning
+    globals()["error"] = logging.error
+    globals()["path2"] = os.path
+    import importlib.metadata
+    import platform
+    version = importlib.metadata.version
+
+    info("Starting main process.")
+    debug(f"Platform: {platform.platform()}")
+    debug(f"Python version: {platform.python_version()}")
+    debug(f"markdown-it module version: {version('markdown-it-py')}")
+    debug(f"rich module version: {version('rich')}")
+    debug(f"lxml module version: {version('lxml')}")
+    debug(f"nuitka module version: {version('nuitka')}")
+    debug(f"black module version: {version('black')}")
+    debug(f"PTools module version: {__version__}")
+    del importlib, version, platform
 
     input_paths: set[str] = set(
         console.input(
             "Input your markdown file [bold]path[/bold] " '("|" to split): '
         ).split("|")
     )
-    logging.debug(f"Input paths: {input_paths}")
+    debug(f"Input paths: {input_paths}")
     # 验证输入文件
     vinput_paths: list[str] = []
     for path in input_paths:
-        if not os.path.exists(path):
-            logging.warning(f'File not found: "{path}"')
-        elif not os.path.isfile(path):
-            logging.warning(f"Path is not a file: {path}")
+        if not path2.exists(path):
+            warn(f'File not found: "{path}"')
+        elif not path2.isfile(path):
+            warn(f"Path is not a file: {path}")
         elif not (path.endswith(".md") or path.endswith(".markdown")):
-            logging.warning(f'Path is not a markdown file: "{path}"')
+            warn(f'Path is not a markdown file: "{path}"')
         else:
             vinput_paths.append(path)
-    logging.debug(f"Valid paths: {vinput_paths}")
+    debug(f"Valid paths: {vinput_paths}")
     if not vinput_paths:
-        logging.error("No valid input files.")
+        error("No valid input files.")
         return 1
 
     output_dir: str = console.input("Input your output directory [bold]path[/bold]: ")
-    if not os.path.exists(output_dir):
-        logging.error(f'Output directory not found: "{output_dir}"')
+    if not path2.exists(output_dir):
+        error(f'Output directory not found: "{output_dir}"')
         return 1
-    elif not os.path.isdir(output_dir):
-        logging.error(f'Output path is not a directory: "{output_dir}"')
+    elif not path2.isdir(output_dir):
+        error(f'Output path is not a directory: "{output_dir}"')
         return 1
-    logging.debug(f'Output directory: "{output_dir}"')
+    debug(f'Output directory: "{output_dir}"')
 
     template: str = console.input(
         "Input your HTML template file [bold]path[/bold] "
@@ -228,27 +258,29 @@ def main() -> int:
     )
     template_content = None
     if template:
-        if not os.path.exists(template):
-            logging.error(f'Template file not found: "{template}"')
-        elif not os.path.isfile(template):
-            logging.error(f'Template path is not a file: "{template}"')
+        if not path2.exists(template):
+            error(f'Template file not found: "{template}"')
+        elif not path2.isfile(template):
+            error(f'Template path is not a file: "{template}"')
         elif not (template.endswith(".html") or template.endswith(".htm")):
-            logging.error(f'Template path is not a HTML file: "{template}"')
+            error(f'Template path is not a HTML file: "{template}"')
         else:
-            logging.debug(f'Template file: "{template}"')
+            debug(f'Template file: "{template}"')
             with open(template, "r", encoding="utf-8") as f:
                 template_content = f.read()
 
     # 全局询问是否格式化所有文件
-    format_all = False
+    format_all: bool = False
     if vinput_paths:
         pretty_global = console.input("Format all output HTML files? (Y/N): ")
         format_all = pretty_global.lower() in ["y", "yes"]
+    else:
+        error("No Valid path")
 
-    logging.info("Starting markdown to HTML conversion with thread pool.")
+    info("Starting markdown to HTML conversion with thread pool.")
 
     # 使用线程池并发处理文件
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = []
         for path in vinput_paths:
             future = executor.submit(
@@ -256,26 +288,26 @@ def main() -> int:
             )
             futures.append(future)
 
-        success_count = 0
-        fail_count = 0
+        success_count: int = 0
+        fail_count: int = 0
         for future in as_completed(futures):
-            success, path, out_path, error = future.result()
+            success, path, out_path, error_ = future.result()
             if success:
                 success_count += 1
-                logging.info(f"Successfully converted: {path} -> {out_path}")
+                info(f"Successfully converted: {path} -> {out_path}")
             else:
                 fail_count += 1
-                logging.error(f"Failed to convert {path}: {error}")
+                error(f"Failed to convert {path}: {error_}")
 
-    logging.info(
-        f"Finished convert process. Success: {success_count}, Failed: {fail_count}"
+    info(
+        f"Finished convert process. Success: {success_count}, Failed: {fail_count}, Total: {success_count + fail_count}"
     )
     update_article_list = console.input(
         "Do you require an update to the article list? (Y/N): "
     )
     if not update_article_list.lower() in ["y", "yes"]:
         return 0
-        logging.info("Starting article list update process.")
+    info("Starting article list update process.")
     gc.collect()  # 强制垃圾回收，释放内存
     success_count = 0
     fail_count = 0
@@ -283,26 +315,24 @@ def main() -> int:
     article_dir = console.input(
         "Please enter the path to the article directory (.html): "
     )
-    if not os.path.exists(article_dir):
-        logging.error(f'Article directory not found: "{article_dir}"')
+    if not path2.exists(article_dir):
+        error(f'Article directory not found: "{article_dir}"')
         return 1
-    elif not os.path.isdir(article_dir):
-        logging.error(f'Article path is not a directory: "{article_dir}"')
+    elif not path2.isdir(article_dir):
+        error(f'Article path is not a directory: "{article_dir}"')
         return 1
 
-    article_list_path = console.input(
-        "Please enter the path to the article list HTML file: "
-    )
-    if not os.path.exists(article_list_path):
-        logging.error(f'Article list file not found: "{article_list_path}"')
+    article_list_path = console.input("Please enter the path to the article list HTML file: ")
+    if not path2.exists(article_list_path):
+        error(f'Article list file not found: "{article_list_path}"')
         return 1
-    elif not os.path.isfile(article_list_path):
-        logging.error(f'Article list path is not a file: "{article_list_path}"')
+    elif not path2.isfile(article_list_path):
+        error(f'Article list path is not a file: "{article_list_path}"')
         return 1
     elif not (
-        article_list_path.endswith(".html") or article_list_path.endswith(".htm")
+            article_list_path.endswith(".html") or article_list_path.endswith(".htm")
     ):
-        logging.error(f'Article list path is not a HTML file: "{article_list_path}"')
+        error(f'Article list path is not a HTML file: "{article_list_path}"')
         return 1
 
     # 收集所有文章信息（标题和路径）
@@ -311,31 +341,33 @@ def main() -> int:
         try:
             if not (filename.endswith(".html") or filename.endswith(".htm")):
                 continue
-            article_path = os.path.join(article_dir, filename)
-            logging.info(f"Processing article: {article_path}")
+            article_path = path2.join(article_dir, filename)
+            info(f"Processing article: {article_path}")
             with open(article_path, "r", encoding="utf-8") as f:
                 article_content = f.read()
             title_els = html2.fromstring(article_content).xpath(".//h1")
             title = title_els[0].text_content() if title_els else "Untitled"
             articles.append((title, article_path))
         except Exception as e:
-            logging.error(f"Failed to process article {filename}: {e}")
+            error(f"Failed to process article {filename}: {e}")
             fail_count += 1
+        else:
+            success_count += 1
 
     if not articles:
-        logging.error("No valid articles found to update the list.")
+        error("No valid articles found to update the list.")
         return 1
 
     # 按标题排序
     articles.sort(key=lambda x: x[0])
 
     # 生成卡片列表（每个卡片是一个div）
-    cards = []
-    base_dir = os.path.dirname(article_list_path)
+    cards: set = set([])
+    base_dir = path2.absdir(path2.dirname(article_list_path))
     for title, path in articles:
-        rel_path = os.path.relpath(path, base_dir)
+        rel_path = path2.relpath(path, base_dir)
         card = f'<div class="card"><a href="{rel_path}">{title}</a></div>'
-        cards.append(card)
+        cards.add(card)
     card_html = "\n".join(cards)
 
     # 读取文章列表文件，解析为HTML树
@@ -344,7 +376,7 @@ def main() -> int:
             list_content = f.read()
         tree = html2.document_fromstring(list_content)
     except Exception as e:
-        logging.error(f"Failed to parse article list file: {e}")
+        error(f"Failed to parse article list file: {e}")
         return 1
 
     # 删除所有 class 包含 "card" 的 div 元素
@@ -352,10 +384,10 @@ def main() -> int:
         parent = card_div.getparent()
         if parent is not None:
             parent.remove(card_div)
-            logging.debug("Removed an existing card div.")
+            debug("Removed an existing card div.")
 
     # 查找占位符 %%card%% 所在的文本节点
-    placeholder_found = False
+    placeholder_found: bool = False
     for element in tree.iter():
         if element.text and "%%card%%" in element.text:
             # 将文本节点中的占位符替换为生成的卡片HTML（解析为元素后插入）
@@ -364,14 +396,9 @@ def main() -> int:
             # 将卡片字符串解析为元素列表
             card_fragments = html2.fragments_fromstring(card_html)
             # 在当前位置插入卡片元素
-            pos = 0
+            pos: int = 0
             for frag in card_fragments:
-                if isinstance(frag, str):
-                    # 文本节点不能直接插入，需作为tail或新元素处理
-                    # 简单起见，将卡片整体作为HTML插入一个占位注释，然后替换
-                    # 但更好的方法是直接使用后续的replace逻辑
-                    pass
-                else:
+                if not isinstance(frag, str):
                     element.insert(pos, frag)
                     pos += 1
             # 处理剩余部分
@@ -379,10 +406,7 @@ def main() -> int:
                 # 如果after非空，作为tail添加到最后一个卡片元素，或创建新文本节点
                 if card_fragments:
                     last = card_fragments[-1]
-                    if isinstance(last, str):
-                        # 理论上不会出现
-                        pass
-                    else:
+                    if not isinstance(last, str):
                         if last.tail:
                             last.tail = after + last.tail
                         else:
@@ -391,7 +415,7 @@ def main() -> int:
                     # 如果没有卡片，直接设置element的tail
                     element.tail = after
             placeholder_found = True
-            logging.debug("Replaced placeholder %%card%% with cards.")
+            debug("Replaced placeholder %%card%% with cards.")
             break
         if element.tail and "%%card%%" in element.tail:
             # 处理tail中的占位符
@@ -405,33 +429,23 @@ def main() -> int:
             # 插入到element之后
             idx = list(parent).index(element)
             for i, frag in enumerate(card_fragments):
-                if isinstance(frag, str):
-                    # 文本节点作为新的元素插入？实际上fragments_fromstring返回的字符串通常是空白
-                    # 忽略纯文本片段
-                    pass
-                else:
+                if not isinstance(frag, str):
                     parent.insert(idx + 1 + i, frag)
             # 处理剩余部分
             if after:
                 if card_fragments:
                     last = card_fragments[-1]
-                    if isinstance(last, str):
-                        pass
-                    else:
+                    if not isinstance(last, str):
                         if last.tail:
                             last.tail = after + last.tail
                         else:
                             last.tail = after
-                else:
-                    # 如果没有卡片，将after设为某个元素的tail或父元素的text
-                    # 简单处理：创建一个注释节点？
-                    pass
             placeholder_found = True
-            logging.debug("Replaced placeholder %%card%% in tail.")
+            debug("Replaced placeholder %%card%% in tail.")
             break
 
     if not placeholder_found:
-        logging.error('Placeholder "%%card%%" not found in the article list file.')
+        error('Placeholder "%%card%%" not found in the article list file.')
         return 1
 
     # 将修改后的树写回文件（使用pretty_print_html格式化）
@@ -442,18 +456,17 @@ def main() -> int:
         with open(article_list_path, "w", encoding="utf-8") as f:
             f.write(final_html)
         success_count = len(articles)
-        logging.info(f"Successfully updated {success_count} cards.")
+        info(f"Successfully updated {success_count} cards.")
     except Exception as e:
-        logging.error(f"Failed to write updated article list: {e}")
+        error(f"Failed to write updated article list: {e}")
         return 1
 
-    logging.info(
+    info(
         f"Finished update process. Success: {success_count}, Failed: {fail_count}"
     )
-    logging.info("All processes completed.")
+    info("All processes completed.")
     return 1 if fail_count else 0
 
 
-# if __name__ == "__main__":
-main()
-input()
+if __name__ == "__main__":
+    exit(main())
