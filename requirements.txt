@@ -3,5 +3,7 @@
 markdown-it-py==4.0.0
 rich==14.3.2
 lxml==6.0.2
-black==26.1.0
-nuitka==4.0.1
+linkify-it-py==2.0.3
+# black==26.1.0  Dev used
+# nuitka==4.0.1  Dev used
+# py-spy==0.4.1  Dev used

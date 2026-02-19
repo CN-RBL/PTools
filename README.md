@@ -12,7 +12,7 @@
 ## Features
 
 1. Easy to use
-   > 你只需要略微修改你的文件并跟随程序的指引即可完成转换
+   > You only need to slightly modify your file and follow the instructions to complete the conversion
 2. The interface is beautiful
    > Power by [rich](https://github.com/Textualize/rich)
 3. Good performance
@@ -22,14 +22,18 @@
 
 [Here!](https://github.com/CN-RBL/requirement.txt)
 
-| Name           | Version |
-|----------------|---------|
-| Python         | 3.12.7  |
-| markdown-it-py | 4.0.0   |
-| rich           | 14.3.2  |
-| lxml           | 6.0.2   |
-| black          | 26.1.0  |
-| nuitka         | 4.0.1   |
+| Name              | Version   |
+|-------------------|-----------|
+| Python            | 3.12.7    |
+| markdown-it-py    | 4.0.0     |
+| rich              | 14.3.2    |
+| lxml              | 6.0.2     |
+| black             | 26.1.0    |
+| ~~nuitka~~        | ~~4.0.1~~ |
+| ~~py-spy~~        | ~~0.4.1~~ |
+| ~~linkify-it-py~~ | ~~2.0.3~~ | 
+
+\* *Strikethrough dependencies are developed for use only*
 
 ## How to use?
 
